@@ -127,9 +127,61 @@ function App() {
       setLoading(false);
     }
   }
+  function validateReflectionLocally() {
+    const fields = [
+      ["Observation", reflection.observation],
+      ["Risk or impact", reflection.risk],
+      ["Defensive improvement", reflection.mitigation],
+    ];
+    const normalizedAnswers = fields.map(([, value]) =>
+      value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+    );
+
+    for (let index = 0; index < fields.length; index += 1) {
+      const [label, rawValue] = fields[index];
+      const value = rawValue.trim();
+      const words = value.match(/[A-Za-z]{2,}/g) || [];
+      const letters = value.replace(/[^A-Za-z]/g, "").toLowerCase();
+      if (words.length < 3 || letters.length < 12 || new Set(letters).size < 5 || !/[aeiouy]/i.test(letters)) {
+        return `${label}: please write a readable answer with at least three meaningful words.`;
+      }
+      if (/(.)\1{5,}/i.test(letters) || (letters.length >= 12 && new Set(letters).size / letters.length < 0.18)) {
+        return `${label}: this answer appears repetitive. Please explain your idea in a complete sentence.`;
+      }
+      if (["asdfgh", "qwerty", "zxcvbn", "poiuyt", "lkjhgf", "mnbvcx"].some((pattern) => letters.includes(pattern))) {
+        return `${label}: this looks like random keyboard input. Please explain your idea in your own words.`;
+      }
+    }
+
+    if (new Set(normalizedAnswers).size !== normalizedAnswers.length) {
+      return "Your answers are too similar. Explain the security principle, its possible impact, and a specific defensive improvement separately.";
+    }
+
+    const genericOrIrrelevant = [
+      /^i am (a |the )?hacker$/,
+      /^i am a student$/,
+      /^nothing( happened)?$/,
+      /^i don'?t know$/,
+      /^no idea$/,
+      /^what general security or privacy principle did you notice$/,
+      /^what could the general risk or impact be$/,
+      /^what defensive improvement would you recommend$/,
+    ];
+    if (normalizedAnswers.some((answer) => genericOrIrrelevant.some((pattern) => pattern.test(answer)))) {
+      return "Please answer the mission questions directly rather than entering a generic or unrelated statement.";
+    }
+
+    return "";
+  }
+
   async function analyzeReflection(event) {
     event.preventDefault();
     if (!mission || analyzing || submissionLock.current || !currentMissionId) return;
+    const validationMessage = validateReflectionLocally();
+    if (validationMessage) {
+      setReflectionError(validationMessage);
+      return;
+    }
     if (completedSessionIds.includes(currentMissionId)) {
       setReflectionOpen(false);
       return;
